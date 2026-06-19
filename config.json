@@ -1,0 +1,34 @@
+{
+  "medical_terms": [
+    "aspirin", "ibuprofen", "hypertension", "stroke", "fever", 
+    "chest", "dizzy", "temperature", "blood pressure", "heart",
+    "patient", "doctor", "hospital", "medication", "symptoms",
+    "pain", "headache", "nausea", "vomiting", "diarrhea",
+    "cough", "sore throat", "runny nose", "fatigue", "weakness",
+    "diabetes", "cancer", "infection", "inflammation", "allergy"
+  ],
+  "api_key": "your_api_key",
+  "base_url": "https://api.chatanywhere.tech/v1",
+  "chat_model": "deepseek-v3",
+  "api_timeout": 300,
+  "api_timeout_connect": 30,
+  "llm_max_output_tokens": 16384,
+  "llm_output_token_multiplier": 2.5,
+  "verbose": false,
+  "model_paths": {
+    "gec_model": "C:\\Users\\Laptop4\\Desktop\\models\\grammar_error_correcter_v1",
+    "glossbert_model": "C:\\Users\\Laptop4\\Desktop\\models\\GlossBERT",
+    "simcse_model": "C:/Users/Laptop4/Desktop/models/distiluse-base-multilingual-cased-v2/"
+  },
+  "thresholds": {
+    "ambiguity_threshold": 0.6,
+    "fragment_threshold": 0.35,
+    "conflict_threshold": 0.1
+  },
+  "weights": {
+    "edit_cost_weight": 0.3,
+    "fluency_weight": 0.4,
+    "wsd_confidence_weight": 0.3,
+    "delta_threshold": 0.05
+  }
+}

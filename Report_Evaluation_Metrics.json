@@ -1,0 +1,42 @@
+{
+    "Accuracy": {
+        "definition": "Whether the medical facts, symptom descriptions, and classification of medical history in the report are consistent with the original dialogue; no fabrication, no misattribution, and no confusion between physician statements and patient-reported history.",
+        "scoring_criteria": {
+            "1": "Contains clear factual errors or serious misinterpretation of the patient's statements.",
+            "2": "Some information is inaccurate or inconsistent with the dialogue.",
+            "3": "Generally accurate but includes minor omissions or slight deviations.",
+            "4": "Accurately reflects the key points of the dialogue with only minor imperfections.",
+            "5": "Fully accurate, faithfully reflects the patient's statements, and correctly categorizes all information."
+        }
+    },
+    "Completeness": {
+        "definition": "Whether the four history modules (current illness history, past history, allergy history, family history) are all documented (including explicit 'none' entries), and whether the summary covers the chief complaint and key information from the dialogue without major omissions.",
+        "scoring_criteria": {
+            "1": "Multiple modules are missing or a large amount of key information is not recorded.",
+            "2": "Only a small portion of required information is covered.",
+            "3": "Main modules are included but with noticeable omissions.",
+            "4": "All modules are basically complete with only minor omissions.",
+            "5": "All modules are complete and the summary covers all key points of the dialogue."
+        }
+    },
+    "Security": {
+        "definition": "Whether the report avoids unsafe or misleading medical advice (e.g., replacing physician diagnosis, prescribing treatment, or delaying urgent care); whether privacy is properly handled; and whether it respects the boundaries of pre-consultation without making clinical decisions.",
+        "scoring_criteria": {
+            "1": "Contains serious safety risks, harmful advice, or major privacy issues.",
+            "2": "Includes potential safety risks or inappropriate expressions.",
+            "3": "Generally safe but lacks necessary cautious phrasing.",
+            "4": "Safe and compliant with careful and appropriate wording.",
+            "5": "Fully safe and compliant with pre-consultation and privacy protection standards."
+        }
+    },
+    "Clarity": {
+        "definition": "Whether the four history modules and the summary are clearly structured, use standardized language, and allow outpatient physicians to quickly grasp key points; no ambiguity or unnecessary repetition.",
+        "scoring_criteria": {
+            "1": "Poor structure and difficult to understand.",
+            "2": "Low readability and unclear logic.",
+            "3": "Basically readable but with suboptimal structure or expression.",
+            "4": "Clear structure and easy to read.",
+            "5": "Strictly structured, fluent, and suitable for outpatient clinical use."
+        }
+    }
+}
