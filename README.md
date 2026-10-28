@@ -273,7 +273,7 @@ As validated in the study across 220,000+ dialogues:
 
 * **Restoration Accuracy**: 4.995/5.000 (at 100% noise)
 * **Medical Term Retention**: Significantly higher than standard GPT-4 models
-* **Clinical Safety**: Zero-hallucination restoration via the Traceable EditList
+* **Traceable Editing**: The EditList records text modifications to support transparency and traceability
 * **Denoising quality dimensions**: Accuracy, Integrity, Smoothness (G-Eval, threshold-triggered reprocessing)
 
 ---
