@@ -8,10 +8,10 @@ This repository contains the official implementation of **PCRAgent**, a collabor
 
 | Script | Role |
 | --- | --- |
-| **`medical_denoising_agent.py`** | **PCRAgent denoising pipeline** — rigorously cleans raw medical dialogues via a Parallel Feedback Strategy and produces a **Traceable EditList** for clinical transparency. |
+| **`medical_denoising_agent.py`** | **PCRAgent denoising pipeline** — processes noisy consultation text using parallel error detectors and records edits in a **Traceable EditList**. |
 | **`batch_medical_processor.py`** | **End-to-end pre-consultation pipeline** — denoises input, runs multi-turn pre-consultation staff dialogue, generates a structured **Pre-Consultation Report (PCR)**, and optionally performs research scoring. |
 
-Unlike generic LLMs, PCRAgent employs specialized detectors for five categories of semantic noise, resolves edit conflicts through multi-agent arbitration, and iteratively refines output via **G-Eval** quality scoring. Even under 100% noise perturbation, the framework achieves near-perfect restoration performance, outperforming generic LLMs like GPT-4o.
+PCRAgent detects five categories of semantic noise, resolves overlapping edits through multi-agent arbitration, and uses **G-Eval** quality scoring to guide iterative refinement.
 
 **End-to-end workflow:**
 
@@ -45,7 +45,7 @@ The scripts mirror the four core functional modules described in the manuscript:
 
 ### 1. Error Detector Module (Parallel Feedback Strategy)
 
-This module simultaneously identifies five categories of semantic noise to ensure no clinical information is misinterpreted.
+This module uses parallel detectors to flag five categories of semantic noise in patient-reported information.
 
 | Class Name | Noise Category | Description | Key Methods/Packages |
 | --- | --- | --- | --- |
@@ -81,7 +81,7 @@ Each edit in the Traceable EditList follows this schema:
 
 ### 3. Output Control Module (Iterative Quality Loop)
 
-A multi-agent arbitration system that resolves edit conflicts and ensures output standards.
+A multi-agent arbitration system that resolves edit conflicts and uses quality scores to determine whether further refinement is needed.
 
 | Class Name | Description | Key Methods/Packages |
 | --- | --- | --- |
@@ -167,7 +167,7 @@ python -c "import nltk; nltk.download('punkt')"
 
 **Note:** LLM-powered modules (`CombinedMedicalDetector`, `EditorPipeline`, `ArbiterPipeline`, `DenoisingQualityGEval`, and the entire pre-consultation pipeline) require a valid API key. Local models (GEC, SymSpell) can run without an API key for deterministic detectors only.
 
-GPT-4o-mini handles ambiguity and interference annotation, local editing, conflict resolution, and targeted self-correction. DeepSeek-V3 is the default evaluator for output quality and optional research scoring. The interactive pipeline uses the separate chat_model setting.
+GPT-4o-mini handles ambiguity and interference annotation, local editing, conflict resolution, and targeted self-correction in the denoising pipeline. The `evaluation_model` setting defaults to DeepSeek-V3 for automated output quality scoring and optional research scoring. The separate `chat_model` setting selects the model used for the interactive pipeline and also defaults to DeepSeek-V3. GPT-4o is a standalone baseline in the manuscript's restoration benchmark.
 
 Entries marked with "high_risk": true in the medical Knowledge Base are supplied as predefined high-risk medical terms to the patient-facing response prompt. The prompt checks current patient-reported symptoms against those terms before issuing a risk alert.
 
@@ -272,14 +272,13 @@ python batch_medical_processor.py \
 
 ---
 
-# 📊 Performance Metrics
+# 📊 Restoration Benchmark
 
-As validated in the study across 220,000+ dialogues:
+The baseline comparisons used the same 22,655 held-out consultations from the AI Medical Chatbot dataset at both 10% and 100% perturbation. Within each perturbation level, all methods received the same perturbed inputs. The study evaluated Accuracy, Integrity, Smoothness, and Semantic Similarity to the corresponding unperturbed gold-standard texts.
 
-* **Restoration Accuracy**: 4.995/5.000 (at 100% noise)
-* **Medical Term Retention**: Significantly higher than standard GPT-4 models
-* **Traceable Editing**: The EditList records text modifications to support transparency and traceability
-* **Denoising quality dimensions**: Accuracy, Integrity, Smoothness (G-Eval, threshold-triggered reprocessing)
+**Standalone baselines (Table 1 and Fig. 3a,b).** PCRAgent achieved higher scores than the evaluated standalone LLM baselines, including GPT-4o, on Accuracy, Integrity, and Smoothness at both perturbation levels.
+
+**Resource-matched baselines and ablations (Table 2 and Fig. 3c,d).** The resource-matched comparison covered six alternative LLM backbones. Within each backbone, knowledge-enabled configurations shared the same Medical Knowledge Base and access procedures. Configurations with iterative self-correction could run up to three refinement rounds. All LLM-based configurations were subject to a common cumulative ceiling of 500,000 input and output tokens per complete restoration, including repeated context and refinement calls. The complete PCRAgent-M implementations generally scored higher than their corresponding resource-matched baselines under the tested conditions.
 
 ---
 
