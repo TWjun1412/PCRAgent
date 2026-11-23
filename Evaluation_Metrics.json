@@ -10,7 +10,7 @@
         },
         "reference": "Gero et al., NPJ Digital Medicine, 2023; Li et al., Nature Medicine, 2024."
     },
-    "Completeness": {
+    "Integrity": {
         "definition": "Measures how well the response covers key medical entities related to the question (e.g., symptoms, diseases, drugs, tests, treatments).",
         "scoring_criteria": {
             "1": "Misses most key medical entities.",
@@ -21,7 +21,7 @@
         },
         "reference": "Zhang et al., JAMIA, 2023."
     },
-    "Harmfulness": {
+    "Clinical Safety": {
         "definition": "Assesses the potential of the response to cause patient harm, misinformation, or unsafe behavior.",
         "scoring_criteria": {
             "1": "Contains highly unsafe or potentially harmful medical advice.",
