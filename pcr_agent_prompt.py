@@ -5,7 +5,7 @@ Design principles:
 - Detection: annotate only; do not rewrite source text (except tag insertion)
 - Editor/Arbiter: preserve medical information, remove non-clinical chatter, resolve ambiguity
 - Clear output format for downstream parsing
-- Unified tags: [AMB:word], [NOS:start]...[NOS:end]
+- Unified tags: [AMB:word], [ITF:start]...[ITF:end]
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ from typing import Dict
 
 # Standard ambiguity tags (aligned with Editor parsing)
 AMB_TAG_TEMPLATE = "[AMB:{word}]"
-NOS_TAG_START = "[NOS:start]"
-NOS_TAG_END = "[NOS:end]"
+ITF_TAG_START = "[ITF:start]"
+ITF_TAG_END = "[ITF:end]"
 
 
 class PCRAgentPrompts:
@@ -55,7 +55,7 @@ class PCRAgentPrompts:
 - 仅为口语重复、语法错误（非语义歧义）
 
 ═══════════════════════════════════════
-任务二：非医患相关片段标注（NOS）
+任务二：非医疗干扰片段标注（ITF）
 ═══════════════════════════════════════
 标出与「症状、病史、用药、检查、治疗、就医」无关的闲聊/噪声片段，例如：
 - 天气、出行、娱乐、工作琐事
@@ -63,12 +63,12 @@ class PCRAgentPrompts:
 - 明显非问诊场景的寒暄
 
 【标注格式】
-{NOS_TAG_START}原文片段{NOS_TAG_END}
+{ITF_TAG_START}原文片段{ITF_TAG_END}
 仅包裹应删除的连续片段，不要扩大范围。
 
-【不应标为 NOS】
+【不应标为 ITF】
 - 患者描述症状、情绪、担忧、生活习惯（与病情相关）
-- 不确定是否相关时，宁可不标 NOS
+- 不确定是否相关时，宁可不标 ITF
 
 ═══════════════════════════════════════
 输出规则
@@ -79,11 +79,11 @@ class PCRAgentPrompts:
 
 【示例】
 输入：After my cold, I've been feeling a lot of depression. The weather is nice today.
-输出：After my {AMB_TAG_TEMPLATE.format(word="cold")}, I've been feeling a lot of {AMB_TAG_TEMPLATE.format(word="depression")}. {NOS_TAG_START}The weather is nice today.{NOS_TAG_END}"""
+输出：After my {AMB_TAG_TEMPLATE.format(word="cold")}, I've been feeling a lot of {AMB_TAG_TEMPLATE.format(word="depression")}. {ITF_TAG_START}The weather is nice today.{ITF_TAG_END}"""
 
     @staticmethod
     def combined_detector_user(text: str) -> str:
-        return f"""请对下列医疗对话文本完成歧义（AMB）与非医患片段（NOS）标注。
+        return f"""请对下列医疗对话文本完成歧义（AMB）与非医疗干扰片段（ITF）标注。
 
 <<<TEXT>>>
 {text}
@@ -146,7 +146,7 @@ class PCRAgentPrompts:
 3. 歧义词是否已用「原词(英文释义)」等形式合理消歧？释义是否与上下文匹配？
 4. 语句是否通顺自然（中英文均可，符合口语/病历转写习惯）？
 5. 是否保留原句核心医学含义，无关键遗漏？
-6. 是否残留任何标注标签（如 [AMB:...]、[AMBIG:...]、[NOS:start] 等）？必须全部去除。
+6. 是否残留任何标注标签（如 [AMB:...]、[AMBIG:...]、[ITF:start] 等）？必须全部去除。
 
 【修正原则】
 - 若当前文本已满足以上要求 → 原样输出当前文本（一字不改）。
@@ -227,7 +227,7 @@ class PCRAgentPrompts:
 【禁止】
 - 不要输出诊断、处方或就医建议。
 - 不要输出评分说明、步骤分析。
-- 不要保留 [AMB:...]、[NOS:...] 等任何标注标签。
+- 不要保留 [AMB:...]、[ITF:...] 等任何标注标签。
 
 【输出】
 仅输出改进后的一句/段去噪文本（语言与原文一致，中文输入则中文输出）。"""
