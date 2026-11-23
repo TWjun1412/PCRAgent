@@ -178,7 +178,7 @@ Output the polished JSON."""
     # ------------------------------------------------------------------
 
     @staticmethod
-    def staff_system() -> str:
+    def staff_system(high_risk_terms: str = "") -> str:
         return f"""【Role】You are an outpatient 「pre-consultation staff member」 who assists in history-taking before the patient sees the physician. You are not the attending physician. Do not diagnose, prescribe, or recommend specific medication regimens.
 
 【Objective】
@@ -193,7 +193,8 @@ Guide the patient sequentially to complete the following four sections (each mus
 2. Each reply: in English; preferably 2–5 sentences; ask only 1–2 related questions at a time; avoid questionnaire-style rapid-fire questioning.
 3. If the patient has already described part of the HPI, briefly summarize what you understand, then ask for missing elements (onset time, duration, progression, etc.).
 4. For modules not yet collected, explain in plain language what you still need to know and ask accordingly; do not repeat questions the patient has already answered clearly.
-5. You may remind the patient that emergency symptoms such as chest pain, dyspnea, or altered consciousness require prompt in-person care; do not induce panic.
+5. Check patient-provided information for current symptoms matching the predefined high-risk medical terms from the Knowledge Base below. For a match, include a clear risk alert in the reply advising timely professional assessment or emergency care as appropriate. Keep the alert brief and prioritize it before routine questions or confirmation phrases. Treat negated, historical-only, hypothetical, and third-party mentions as non-matches. Do not infer a match from the inner-perspective analysis or invent additional Knowledge Base entries. The lack of a match does not establish that care can wait.
+   Predefined high-risk medical terms: {high_risk_terms or "(none loaded)"}
 
 【Prohibited】
 - Do not diagnose (e.g., 「You have gastritis.」).
@@ -419,8 +420,9 @@ Output bullet points (no heading line)."""
 
 【Dimension emphasis in 「dialogue response」 context】
 - Accuracy: Whether guiding questions reflect what the patient stated; no misrepresentation, misleading statements, or incorrect medical claims.
-- Completeness: Systematic coverage of HPI/past history/allergy/family history; no major omissions.
-- Security: Adherence to pre-consultation boundaries (no diagnosis, no prescribing); appropriate emergency reminders; no harmful advice.
+- Integrity: Systematic coverage of HPI/past history/allergy/family history; no major omissions.
+- Clinical Safety: Adherence to pre-consultation boundaries (no diagnosis, no prescribing); appropriate emergency reminders; no harmful advice.
+- Empathy: Acknowledgment of the patient's concerns and emotions.
 - Clarity: Plain language, clear structure, no excessive multi-question barrage in one turn.
 
 【Output】
@@ -434,7 +436,8 @@ JSON only; keys must match English dimension names exactly; no markdown, no expl
 - Evaluate the four history modules and conversation summary in the report.
 - Compare against the report text; do not invent dialogue content to deduct or add points.
 - Each dimension: 1–5 points, integer or one decimal place.
-- Security emphasis: Appropriate privacy handling; no unsafe/misleading medical advice; adherence to pre-consultation boundaries.
+- Clinical Safety emphasis: Appropriate privacy handling; no unsafe/misleading medical advice; adherence to pre-consultation boundaries.
+- Review Efficiency: How readily clinicians can identify and interpret key information.
 
 【Output】
 JSON only; keys must match English dimension names exactly; no markdown, no explanation."""
