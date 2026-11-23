@@ -33,7 +33,7 @@ from llm_api_utils import (
     estimate_max_tokens,
     print_api_error,
 )
-from medical_denoising_agent import DetectorEditorArbiter
+from medical_denoising_agent import DetectorEditorArbiter, MedicalTermsManager
 from pre_consultation_prompts import (
     COMPLETION_QUESTION,
     CONFIRM_END_PROMPT,
@@ -47,6 +47,7 @@ from pre_consultation_prompts import (
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG_PATH = os.path.join(_SCRIPT_DIR, "config.json")
 DEFAULT_MEDICAL_DICT = os.path.join(_SCRIPT_DIR, "medical_terms.json")
+DEFAULT_DIALOGUE_METRICS = os.path.join(_SCRIPT_DIR, "Evaluation_Metrics.json")
 DEFAULT_REPORT_METRICS = os.path.join(_SCRIPT_DIR, "Report_Evaluation_Metrics.json")
 
 HISTORY_MODULE_KEYS = [
@@ -88,25 +89,20 @@ END_INTENT_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
-RESEARCH_SCORE_DIMENSIONS = ["Accuracy", "Completeness", "Security", "Clarity"]
-
-SCORE_DIMENSION_LABELS = {
-    "Accuracy": "Accuracy",
-    "Completeness": "Completeness",
-    "Security": "Security",
-    "Clarity": "Clarity",
+DIALOGUE_SCORE_DIMENSIONS = ("Accuracy", "Integrity", "Clinical Safety", "Empathy", "Clarity")
+REPORT_SCORE_DIMENSIONS = ("Accuracy", "Integrity", "Clinical Safety", "Clarity", "Review Efficiency")
+LEGACY_SCORE_LABELS = {
+    "completeness": "integrity",
+    "security": "clinical safety",
+    "harmfulness": "clinical safety",
 }
 
 
 def build_output_csv_columns() -> List[str]:
     """Build batch output CSV columns: base columns + one column per score dimension."""
     cols = ["Original input", "Denoised text", "Pre-consultation report"]
-    for dim in RESEARCH_SCORE_DIMENSIONS:
-        label = SCORE_DIMENSION_LABELS[dim]
-        cols.append(f"Model reply_{label}")
-    for dim in RESEARCH_SCORE_DIMENSIONS:
-        label = SCORE_DIMENSION_LABELS[dim]
-        cols.append(f"Report_{label}")
+    cols.extend(f"Model reply_{dim}" for dim in DIALOGUE_SCORE_DIMENSIONS)
+    cols.extend(f"Report_{dim}" for dim in REPORT_SCORE_DIMENSIONS)
     return cols
 
 
@@ -214,19 +210,32 @@ class BatchMedicalProcessor:
             config=self.config,
         )
         self.chat_model = self.config.get("chat_model", "deepseek-v3")
+        self.evaluation_model = self.config.get("evaluation_model", "deepseek-v3")
         print(
             f"LLM endpoint: {self.config.get('base_url', 'https://api.chatanywhere.tech/v1')} "
             f"| model: {self.chat_model} "
             f"| read timeout: {self.config.get('api_timeout', 180)}s"
         )
 
+        self.dialogue_metrics = self._load_metrics(
+            self.config.get("dialogue_evaluation_metrics_path", DEFAULT_DIALOGUE_METRICS),
+            DIALOGUE_SCORE_DIMENSIONS,
+        )
         self.report_metrics = self._load_metrics(
-            self.config.get("report_evaluation_metrics_path", DEFAULT_REPORT_METRICS)
+            self.config.get("report_evaluation_metrics_path", DEFAULT_REPORT_METRICS),
+            REPORT_SCORE_DIMENSIONS,
         )
 
         self.denoiser: Optional[DetectorEditorArbiter] = None
         if self.config.get("enable_denoising", True):
             self._init_denoiser()
+        if self.denoiser:
+            self.knowledge_base = self.denoiser.medical_terms_manager
+        else:
+            self.knowledge_base = MedicalTermsManager(
+                self.config.get("medical_dictionary_path", DEFAULT_MEDICAL_DICT)
+            )
+            self.knowledge_base.load_medical_dictionary()
 
     def _default_config(self) -> Dict[str, Any]:
         return {
@@ -268,11 +277,11 @@ class BatchMedicalProcessor:
             print(f"Denoiser initialization failed: {e}")
             self.denoiser = None
 
-    def _load_metrics(self, path: str) -> Dict[str, Any]:
+    def _load_metrics(self, path: str, dimensions: Tuple[str, ...]) -> Dict[str, Any]:
         try:
             with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return {k: v for k, v in data.items() if k in RESEARCH_SCORE_DIMENSIONS}
+                data = self._canonical_score_keys(json.load(f))
+            return {dim: data[dim.lower()] for dim in dimensions if dim.lower() in data}
         except Exception as e:
             print(f"Failed to load evaluation metrics ({path}): {e}")
             return {}
@@ -287,7 +296,9 @@ class BatchMedicalProcessor:
         temperature: float = 0.4,
         max_tokens: Optional[int] = None,
         context: str = "Pre-consultation LLM",
+        model: Optional[str] = None,
     ) -> str:
+        model = model or self.chat_model
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -298,7 +309,7 @@ class BatchMedicalProcessor:
             response = chat_completions_create(
                 self.client,
                 context=context,
-                model=self.chat_model,
+                model=model,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -309,7 +320,7 @@ class BatchMedicalProcessor:
             print_api_error(
                 e,
                 context=context,
-                model=self.chat_model,
+                model=model,
                 base_url=self.config.get("base_url"),
                 show_traceback=True,
             )
@@ -495,7 +506,9 @@ class BatchMedicalProcessor:
         )
 
         return self._chat(
-            PreConsultationPrompts.staff_system(),
+            PreConsultationPrompts.staff_system(
+                ", ".join(sorted(self.knowledge_base.get_high_risk_terms()))
+            ),
             user,
             temperature=0.5,
             max_tokens=520,
@@ -735,8 +748,8 @@ class BatchMedicalProcessor:
     # ------------------------- Research scoring (non-core service) -------------------------
 
     def score_dialogue_replies(self, session: PreConsultationSession) -> Dict[str, float]:
-        if not self.report_metrics:
-            return {d: 3.0 for d in RESEARCH_SCORE_DIMENSIONS}
+        if not self.dialogue_metrics:
+            return {d: 3.0 for d in DIALOGUE_SCORE_DIMENSIONS}
         staff_block = "\n---\n".join(session.staff_replies) or "(No staff replies)"
         prompt = PreConsultationPrompts.research_rating_user(
             title="[Task] Score the pre-consultation staff's overall reply quality across this session (do not score individual utterances).",
@@ -744,7 +757,7 @@ class BatchMedicalProcessor:
                 f"=== Full conversation log ===\n{session.transcript()}\n\n"
                 f"=== All staff replies (combined) ===\n{staff_block}"
             ),
-            metrics=self.report_metrics,
+            metrics=self.dialogue_metrics,
         )
         raw = self._chat(
             PreConsultationPrompts.research_dialogue_score_system(),
@@ -752,13 +765,14 @@ class BatchMedicalProcessor:
             temperature=0.15,
             max_tokens=220,
             context="Research dialogue-reply scoring",
+            model=self.evaluation_model,
         )
         data = self._parse_json_block(raw) or {}
-        return self._normalize_scores(data)
+        return self._normalize_scores(data, DIALOGUE_SCORE_DIMENSIONS)
 
     def score_report(self, report: PreConsultationReport) -> Dict[str, float]:
         if not self.report_metrics:
-            return {d: 3.0 for d in RESEARCH_SCORE_DIMENSIONS}
+            return {d: 3.0 for d in REPORT_SCORE_DIMENSIONS}
         prompt = PreConsultationPrompts.research_rating_user(
             title="[Task] Score the quality of the following pre-consultation report.",
             content=report.to_text(),
@@ -770,15 +784,25 @@ class BatchMedicalProcessor:
             temperature=0.15,
             max_tokens=220,
             context="Research report scoring",
+            model=self.evaluation_model,
         )
         data = self._parse_json_block(raw) or {}
-        return self._normalize_scores(data)
+        return self._normalize_scores(data, REPORT_SCORE_DIMENSIONS)
 
     @staticmethod
-    def _normalize_scores(data: Dict) -> Dict[str, float]:
+    def _canonical_score_keys(data: Dict[str, Any]) -> Dict[str, Any]:
+        normalized = {key.lower(): value for key, value in data.items()}
+        for old, new in LEGACY_SCORE_LABELS.items():
+            if old in normalized:
+                normalized.setdefault(new, normalized[old])
+        return normalized
+
+    @staticmethod
+    def _normalize_scores(data: Dict, dimensions: Tuple[str, ...]) -> Dict[str, float]:
+        data = BatchMedicalProcessor._canonical_score_keys(data)
         out: Dict[str, float] = {}
-        for dim in RESEARCH_SCORE_DIMENSIONS:
-            val = data.get(dim, data.get(dim.lower(), 3))
+        for dim in dimensions:
+            val = data.get(dim.lower(), 3)
             try:
                 out[dim] = float(val)
             except (TypeError, ValueError):
@@ -791,12 +815,12 @@ class BatchMedicalProcessor:
 
     @staticmethod
     def scores_to_csv_fields(
-        scores: Optional[Dict[str, float]], prefix: str
+        scores: Optional[Dict[str, float]], prefix: str, dimensions: Tuple[str, ...]
     ) -> Dict[str, Any]:
         """Expand score dict into CSV columns (one column per dimension)."""
         fields: Dict[str, Any] = {}
-        for dim in RESEARCH_SCORE_DIMENSIONS:
-            col = f"{prefix}_{SCORE_DIMENSION_LABELS[dim]}"
+        for dim in dimensions:
+            col = f"{prefix}_{dim}"
             if scores is not None and dim in scores:
                 fields[col] = scores[dim]
             else:
@@ -817,8 +841,8 @@ class BatchMedicalProcessor:
             "Denoised text": denoised_text,
             "Pre-consultation report": report_text,
         }
-        row.update(BatchMedicalProcessor.scores_to_csv_fields(dialogue_score, "Model reply"))
-        row.update(BatchMedicalProcessor.scores_to_csv_fields(report_score, "Report"))
+        row.update(BatchMedicalProcessor.scores_to_csv_fields(dialogue_score, "Model reply", DIALOGUE_SCORE_DIMENSIONS))
+        row.update(BatchMedicalProcessor.scores_to_csv_fields(report_score, "Report", REPORT_SCORE_DIMENSIONS))
         return row
 
     @staticmethod
