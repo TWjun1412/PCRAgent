@@ -1,6 +1,6 @@
 # PCRAgent
 
-Analysis Code for: **[PCRAgent: A Multi-Agent clinical pre-consultation system for structuring noisy patient reported information into clinical reports and AI-ready data]**
+Analysis Code for: **[PCRAgent: A Pre-Consultation Clinical AI Agent for Transforming Patient-Reported Information into Physician-Ready Reports and Structured Clinical Data]**
 
 # 🌟 Overview
 
@@ -35,7 +35,7 @@ Raw noisy text
 | `pre_consultation_prompts.py` | LLM prompt templates for pre-consultation dialogue and report generation |
 | `llm_api_utils.py` | Shared OpenAI-compatible API client, retry, and token utilities |
 | `config.json` | API key, model paths, thresholds, and runtime settings |
-| `medical_terms.json` | Protected medical dictionary for spell-checking |
+| `medical_terms.json` | Medical Knowledge Base for term protection and predefined high-risk medical terms |
 
 ---
 
@@ -52,7 +52,7 @@ This module simultaneously identifies five categories of semantic noise to ensur
 | `SpellChecker` | **Spelling (SPL)** | Detects ASR-induced typos while protecting professional medical terms. | `symspellpy`, `MedicalTermsManager` |
 | `RepetitionDetector` | **Repetition (RPT)** | Identifies redundant oral fragments and n-gram stutters. | `collections.Counter`, `re` |
 | `GECTagger` | **Grammar (GRM)** | Corrects syntactic fragmentation using seq2seq models. | `transformers` (GEC Model) |
-| `CombinedMedicalDetector` | **Ambiguity (AMB) & Interference (NOS)** | LLM-powered detection of ambiguous clinical terms and non-medical noise. | OpenAI-compatible API, `PCRAgentPrompts` |
+| `CombinedMedicalDetector` | **Medical Ambiguity (AMB) & Non-medical Interference (ITF)** | LLM-powered detection of ambiguous clinical terms and non-medical noise. | OpenAI-compatible API, `PCRAgentPrompts` |
 
 **Main orchestrator:** `DetectorEditorArbiter` — wires all detectors, editor, arbiter, and quality evaluator.
 
@@ -74,7 +74,7 @@ Each edit in the Traceable EditList follows this schema:
   "op": "REPLACE" | "DELETE" | "INSERT",
   "cand_texts": ["candidate1", "candidate2", ...],
   "score": float,
-  "tag": "RPT|SPL|GRM|AMB|NOS",
+  "tag": "RPT|SPL|GRM|AMB|ITF",
   "edit_type": "deterministic|candidate"
 }
 ```
@@ -93,7 +93,7 @@ A multi-agent arbitration system that resolves edit conflicts and ensures output
 | Class Name | Description | Key Metrics |
 | --- | --- | --- |
 | `EvaluationMetrics` | Comprehensive calculation of term retention rates and semantic similarity. | Term retention, Cohen's Kappa |
-| `MedicalTermsManager` | Loads and manages the protected medical dictionary. | Dictionary lookup, term protection |
+| `MedicalTermsManager` | Loads the medical Knowledge Base. | Dictionary lookup, term protection |
 
 ---
 
@@ -110,7 +110,7 @@ Extends denoising with a multi-turn pre-consultation workflow and structured rep
 | **3. History extraction** | `extract_modules_from_text()` | Extracts HPI, past history, allergy, family history, etc. |
 | **4. Multi-turn dialogue** | `run_pre_consultation_dialogue()` | Staff-guided collection with inner-world reconstruction |
 | **5. Report generation** | `build_report()` | Produces a structured **Pre-Consultation Report (PCR)** |
-| **6. Research scoring** *(optional)* | `score_dialogue_replies()`, `score_report()` | Accuracy, Completeness, Security, Clarity |
+| **6. Research scoring** *(optional)* | `score_dialogue_replies()`, `score_report()` | Separate patient-facing and physician-facing scoring rubrics |
 
 ### Key Classes
 
@@ -129,8 +129,8 @@ Extends denoising with a multi-turn pre-consultation workflow and structured rep
 | `Original input` | Raw noisy input text |
 | `Denoised text` | Output after PCRAgent denoising |
 | `Pre-consultation report` | Structured PCR report |
-| `Model reply_*` | Research scores for staff dialogue (Accuracy, Completeness, Security, Clarity) |
-| `Report_*` | Research scores for the generated report |
+| `Model reply_*` | Patient-facing response scores (Accuracy, Integrity, Clinical Safety, Empathy, Clarity) |
+| `Report_*` | Physician-facing report scores (Accuracy, Integrity, Clinical Safety, Clarity, Review Efficiency) |
 
 ---
 
@@ -159,12 +159,17 @@ python -c "import nltk; nltk.download('punkt')"
   "api_key": "your-api-key",
   "base_url": "https://api.chatanywhere.tech/v1",
   "chat_model": "deepseek-v3",
+  "evaluation_model": "deepseek-v3",
   "medical_dictionary_path": "medical_terms.json",
   "api_timeout": 300
 }
 ```
 
 **Note:** LLM-powered modules (`CombinedMedicalDetector`, `EditorPipeline`, `ArbiterPipeline`, `DenoisingQualityGEval`, and the entire pre-consultation pipeline) require a valid API key. Local models (GEC, SymSpell) can run without an API key for deterministic detectors only.
+
+GPT-4o-mini handles ambiguity and interference annotation, local editing, conflict resolution, and targeted self-correction. DeepSeek-V3 is the default evaluator for output quality and optional research scoring. The interactive pipeline uses the separate chat_model setting.
+
+Entries marked with "high_risk": true in the medical Knowledge Base are supplied as predefined high-risk medical terms to the patient-facing response prompt. The prompt checks current patient-reported symptoms against those terms before issuing a risk alert.
 
 **Optional local model paths** (configure in `config.json` → `model_paths`):
 
@@ -284,7 +289,7 @@ If you find this work useful, please cite our paper:
 
 ```bibtex
 @article{pcragent2026,
-  title={PCRAgent: A Multi-Agent clinical pre-consultation system for structuring noisy patient reported information into clinical reports and AI-ready data},
+  title={PCRAgent: A Pre-Consultation Clinical AI Agent for Transforming Patient-Reported Information into Physician-Ready Reports and Structured Clinical Data},
   author={...},
   year={2026}
 }
