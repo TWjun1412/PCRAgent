@@ -17,7 +17,7 @@ Output format for edits:
   "op": "REPLACE" | "DELETE" | "INSERT",
   "cand_texts": ["candidate1", "candidate2", ...],
   "score": float,
-  "tag": "RPT|SPL|GRM|AMB|NOS",
+  "tag": "RPT|SPL|GRM|AMB|ITF",
   "edit_type": "deterministic|candidate"
 }, ...]
 """
@@ -174,7 +174,7 @@ class SpanEdit:
     op: str  # "REPLACE"/"DELETE"/"INSERT"
     cand_texts: List[str]
     score: float
-    tag: str = ""  # "RPT|SPL|GRM|AMB|NOS"
+    tag: str = ""  # "RPT|SPL|GRM|AMB|ITF"
     edit_type: str = "deterministic"  # "deterministic|candidate"
     detector_name: str = ""  # Source detector name
 
@@ -375,7 +375,7 @@ class CombinedMedicalDetector(BaseExtractorModule):
             ]
             response = chat_completions_create(
                 self.client,
-                context="PCRAgent CombinedMedicalDetector ambiguity/NOS detection",
+                context="PCRAgent CombinedMedicalDetector ambiguity/ITF detection",
                 model=self.model_name,
                 messages=messages,
                 temperature=0.1,
@@ -408,7 +408,7 @@ class CombinedMedicalDetector(BaseExtractorModule):
     def _extract_non_medical_fragments(self, annotated_text: str) -> List[Tuple[str, int, int]]:
         """Extract non-medical dialogue fragments from annotated text."""
         non_medical_fragments = []
-        pattern = r'\[NOS:start\](.*?)\[NOS:end\]'
+        pattern = r'\[(?:ITF|NOS):start\](.*?)\[(?:ITF|NOS):end\]'
         
         for match in re.finditer(pattern, annotated_text, re.DOTALL):
             fragment = match.group(1).strip()
@@ -420,9 +420,9 @@ class CombinedMedicalDetector(BaseExtractorModule):
 
     def _protect_existing_tags(self, text: str) -> str:
         """Protect existing tags to avoid duplicate processing."""
-        # Remove existing AMBIG and NOS tags to avoid duplicate annotation
+        # Remove existing AMBIG and ITF tags to avoid duplicate annotation
         protected_text = re.sub(PCRAgentPrompts.AMBIGUITY_TAG_PATTERN, '', text)
-        protected_text = re.sub(r'\[NOS:start\].*?\[NOS:end\]', '', protected_text, flags=re.DOTALL)
+        protected_text = re.sub(r'\[(?:ITF|NOS):start\].*?\[(?:ITF|NOS):end\]', '', protected_text, flags=re.DOTALL)
         return protected_text
 
     def detect(self, text: str) -> List[SpanEdit]:
@@ -460,7 +460,7 @@ class CombinedMedicalDetector(BaseExtractorModule):
                         start_char=word_start,
                         end_char=word_end,
                         op="REPLACE",
-                        cand_texts=[f"[AMBIG:{original_word}]"],
+                        cand_texts=[f"[AMB:{original_word}]"],
                         score=0.8,  # Default confidence
                         tag="AMB",
                         edit_type="candidate",
@@ -480,7 +480,7 @@ class CombinedMedicalDetector(BaseExtractorModule):
                         op="DELETE",
                         cand_texts=[""],
                         score=0.9,
-                        tag="NOS",
+                        tag="ITF",
                         edit_type="deterministic",
                         detector_name="CombinedMedical"
                     ))
@@ -505,7 +505,7 @@ class EditManager:
             "RPT": 2,  # Repetition - high priority (step 2)
             "GRM": 3,  # Grammar errors - medium-high priority (step 3)
             "AMB": 4,  # Ambiguity resolution - medium priority (step 4)
-            "NOS": 5   # Non-medical content - low priority (step 5)
+            "ITF": 5   # Non-medical content - low priority (step 5)
         }
 
         # Edit-type compatibility matrix
@@ -515,8 +515,8 @@ class EditManager:
             ("SPL", "AMB"): False,  # Spelling and ambiguity incompatible
             ("RPT", "GRM"): True,   # Repetition and grammar can merge
             ("RPT", "SPL"): True,   # Repetition and spelling can merge
-            ("NOS", "GRM"): False,  # Non-medical dialogue incompatible with grammar
-            ("NOS", "SPL"): False,  # Non-medical dialogue incompatible with spelling
+            ("ITF", "GRM"): False,  # Non-medical dialogue incompatible with grammar
+            ("ITF", "SPL"): False,  # Non-medical dialogue incompatible with spelling
         }
         
     def classify_edits(self, edits: List[SpanEdit]) -> Tuple[List[SpanEdit], List[SpanEdit]]:
@@ -526,7 +526,7 @@ class EditManager:
         candidates = []
         
         for edit in edits:
-            if edit.tag in ["RPT", "SPL", "GRM", "NOS", "AMB"]:
+            if edit.tag in ["RPT", "SPL", "GRM", "ITF", "AMB"]:
                 edit.edit_type = "deterministic"
                 deterministic.append(edit)
             else:
@@ -892,10 +892,10 @@ class EditorPipeline:
         # Process edits: merge overlapping edits
         processed_edits = self.edit_manager.process_edits(edits, text)
 
-        # Process AMB edits: convert [AMBIG:word] to word(interpretation)
+        # Process AMB edits: convert [AMB:word] to word(interpretation)
         for edit in processed_edits:
             if edit.tag == "AMB" and edit.cand_texts:
-                # Extract original word from [AMBIG:word] tag
+                # Extract original word from [AMB:word] tag
                 import re
                 amb_tag = edit.cand_texts[0] if edit.cand_texts else ""
                 match = re.match(r'\[(?:AMB|AMBIG|AMG):([^\]]+)\]', amb_tag)
@@ -965,7 +965,7 @@ class ArbiterCore:
             "RPT": 2,  # Repetition - high priority (step 2)
             "GRM": 3,  # Grammar errors - medium-high priority (step 3)
             "AMB": 4,  # Ambiguity resolution - medium priority (step 4)
-            "NOS": 5,  # Non-medical dialogue - low priority (step 5)
+            "ITF": 5,  # Non-medical dialogue - low priority (step 5)
             "Fragment": 6  # Fragment noise - lowest priority (removed; kept for compatibility)
         }
 
@@ -976,8 +976,8 @@ class ArbiterCore:
             ("SPL", "AMB"): False,  # Spelling and ambiguity incompatible
             ("RPT", "GRM"): True,   # Repetition and grammar can merge
             ("RPT", "SPL"): True,   # Repetition and spelling can merge
-            ("NOS", "GRM"): False,  # Non-medical dialogue incompatible with grammar
-            ("NOS", "SPL"): False,  # Non-medical dialogue incompatible with spelling
+            ("ITF", "GRM"): False,  # Non-medical dialogue incompatible with grammar
+            ("ITF", "SPL"): False,  # Non-medical dialogue incompatible with spelling
         }
         
     def detect_conflicts(self, edits: List[SpanEdit]) -> List[Dict]:
@@ -1469,7 +1469,7 @@ class ArbiterPipeline:
             if result.startswith("'") and result.endswith("'"):
                 result = result[1:-1]
             result = re.sub(PCRAgentPrompts.AMBIGUITY_TAG_PATTERN, "", result)
-            result = re.sub(r"\[NOS:start\].*?\[NOS:end\]", "", result, flags=re.DOTALL)
+            result = re.sub(r"\[(?:ITF|NOS):start\].*?\[(?:ITF|NOS):end\]", "", result, flags=re.DOTALL)
             return result if result else edited_text
         except Exception as e:
             print_api_error(
@@ -1482,17 +1482,19 @@ class ArbiterPipeline:
 
 # -------------------------- Evaluation Metrics --------------------------
 class MedicalTermsManager:
-    """Medical dictionary manager for efficient term lookup."""
+    """Medical Knowledge Base manager for efficient term lookup."""
     
     def __init__(self, dictionary_path: str = None):
         self.dictionary_path = dictionary_path
         self._terms_set = None
+        self._high_risk_terms: set = set()
         self._terms_trie = None
         self._regex_patterns_cache = {}
         self._loaded = False
         
     def load_medical_dictionary(self, dictionary_path: str = None) -> bool:
         """Load medical dictionary file."""
+        self._high_risk_terms = set()
         if dictionary_path:
             self.dictionary_path = dictionary_path
 
@@ -1507,11 +1509,15 @@ class MedicalTermsManager:
 
             # Extract terms
             terms = set()
+            high_risk_terms = set()
             for item in data:
                 if isinstance(item, dict) and "term" in item:
                     terms.add(item["term"])
+                    if item.get("high_risk") is True:
+                        high_risk_terms.add(item["term"])
 
             self._terms_set = terms
+            self._high_risk_terms = high_risk_terms
             self._build_trie()
             self._loaded = True
 
@@ -1542,6 +1548,10 @@ class MedicalTermsManager:
             return False
         return token.lower() in self._terms_set
     
+    def get_high_risk_terms(self) -> set:
+        """Return the predefined high-risk terms in the Knowledge Base."""
+        return self._high_risk_terms.copy()
+
     def get_medical_terms(self) -> set:
         """Return medical term set."""
         return self._terms_set or set()
@@ -2009,7 +2019,11 @@ class DetectorEditorArbiter:
 
         # Denoising quality scorer (GEval)
         self.quality_evaluator = (
-            DenoisingQualityGEval(api_key=api_key, **llm_kw) if api_key else None
+            DenoisingQualityGEval(
+                api_key=api_key,
+                model_name=self.api_config.get("evaluation_model", "deepseek-v3"),
+                **llm_kw,
+            ) if api_key else None
         )
 
         # Quality score thresholds
@@ -2031,7 +2045,7 @@ class DetectorEditorArbiter:
         ]
 
         if self.combined_medical:
-            detectors.append(("CombinedMedical", self.combined_medical))  # 4. Ambiguity (AMB) + 5. Non-medical (NOS)
+            detectors.append(("CombinedMedical", self.combined_medical))  # 4. Ambiguity (AMB) + 5. Non-medical (ITF)
 
         for name, detector in detectors:
             try:
@@ -2040,14 +2054,14 @@ class DetectorEditorArbiter:
                     edit.detector_name = name
                 all_edits.extend(edits)
 
-                # Log AMB and NOS edits separately
+                # Log AMB and ITF edits separately
                 if name == "CombinedMedical":
                     amb_edits = [e for e in edits if e.tag == "AMB"]
-                    nos_edits = [e for e in edits if e.tag == "NOS"]
+                    itf_edits = [e for e in edits if e.tag == "ITF"]
                     if amb_edits:
                         print(f"[AMB] Found {len(amb_edits)} edits")
-                    if nos_edits:
-                        print(f"[NOS] Found {len(nos_edits)} edits")
+                    if itf_edits:
+                        print(f"[ITF] Found {len(itf_edits)} edits")
                 else:
                     print(f"[{name}] Found {len(edits)} edits")
             except Exception as e:
