@@ -13,6 +13,8 @@ This repository contains the official implementation of **PCRAgent**, a collabor
 
 PCRAgent detects five categories of semantic noise, resolves overlapping edits through multi-agent arbitration, and uses **G-Eval** quality scoring to guide iterative refinement.
 
+Traceable Editing: The EditList records text modifications to support transparency and traceability.
+
 **End-to-end workflow:**
 
 ```
@@ -277,6 +279,8 @@ python batch_medical_processor.py \
 The baseline comparisons used the same 22,655 held-out consultations from the AI Medical Chatbot dataset at both 10% and 100% perturbation. Within each perturbation level, all methods received the same perturbed inputs. The study evaluated Accuracy, Integrity, Smoothness, and Semantic Similarity to the corresponding unperturbed gold-standard texts.
 
 **Standalone baselines (Table 1 and Fig. 3a,b).** PCRAgent achieved higher scores than the evaluated standalone LLM baselines, including GPT-4o, on Accuracy, Integrity, and Smoothness at both perturbation levels.
+
+Under the evaluated 100% perturbation condition, PCRAgent achieved an Accuracy score of 4.99 ± 0.07 and an Integrity score of 5.00 ± 0.00.
 
 **Resource-matched baselines and ablations (Table 2 and Fig. 3c,d).** The resource-matched comparison covered six alternative LLM backbones. Within each backbone, knowledge-enabled configurations shared the same Medical Knowledge Base and access procedures. Configurations with iterative self-correction could run up to three refinement rounds. All LLM-based configurations were subject to a common cumulative ceiling of 500,000 input and output tokens per complete restoration, including repeated context and refinement calls. The complete PCRAgent-M implementations generally scored higher than their corresponding resource-matched baselines under the tested conditions.
 
